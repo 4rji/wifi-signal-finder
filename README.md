@@ -5,6 +5,11 @@ Minimal MVP that scans Wi-Fi signal levels via `iw`, exposes an HTTP API + SSE, 
 ## Run (scan mode, default)
 
 ```bash
+
+go run ./cmd/server
+
+or
+
 go run ./cmd/server --if wlp0s20f3 --interval 500ms --listen 127.0.0.1:8888
 ```
 
