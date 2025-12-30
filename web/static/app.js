@@ -5,6 +5,7 @@ const state = {
 };
 
 const elements = {
+  ifname: document.getElementById("ifname"),
   ssid: document.getElementById("ssid"),
   bssid: document.getElementById("bssid"),
   freq: document.getElementById("freq"),
@@ -40,6 +41,7 @@ function pickBestSample(samples) {
 }
 
 function updateReadout(sample) {
+  elements.ifname.textContent = sample.ifname || "—";
   elements.ssid.textContent = sample.ssid || "—";
   elements.bssid.textContent = sample.bssid || "—";
   elements.freq.textContent = sample.freq_mhz ? `${sample.freq_mhz} MHz` : "—";

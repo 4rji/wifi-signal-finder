@@ -167,13 +167,14 @@ func buildCollectors(mode string, ifs []string, targetSSID string, targetBSSID s
 			SSID:  strings.TrimSpace(targetSSID),
 			BSSID: strings.TrimSpace(targetBSSID),
 		}
-		target, err := resolveScanTarget(ifs[0], target)
+		target, useSudo, err := resolveScanTarget(ifs[0], target)
 		if err != nil {
 			return nil, err
 		}
-		scanner := collector.ScanCollector{
-			IfName: ifs[0],
-			Target: target,
+		scanner := &collector.ScanCollector{
+			IfName:  ifs[0],
+			Target:  target,
+			UseSudo: useSudo,
 		}
 		collectors = append(collectors, namedSampler{
 			name:    ifs[0],
@@ -191,18 +192,19 @@ func buildCollectors(mode string, ifs []string, targetSSID string, targetBSSID s
 	return collectors, nil
 }
 
-func resolveScanTarget(ifname string, target collector.ScanTarget) (collector.ScanTarget, error) {
+func resolveScanTarget(ifname string, target collector.ScanTarget) (collector.ScanTarget, bool, error) {
 	if target.SSID != "" || target.BSSID != "" {
-		return target, nil
+		return target, false, nil
 	}
-	networks, err := collector.ScanNetworks(ifname)
+	networks, useSudo, err := collector.ScanNetworksWithFallback(ifname, false)
 	if err != nil {
-		return collector.ScanTarget{}, err
+		return collector.ScanTarget{}, useSudo, err
 	}
 	if len(networks) == 0 {
-		return collector.ScanTarget{}, errors.New("no networks found in scan results")
+		return collector.ScanTarget{}, useSudo, errors.New("no networks found in scan results")
 	}
-	return promptNetwork(networks)
+	target, err = promptNetwork(networks)
+	return target, useSudo, err
 }
 
 func promptNetwork(networks []model.Sample) (collector.ScanTarget, error) {

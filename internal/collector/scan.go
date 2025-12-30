@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -21,15 +22,17 @@ type ScanTarget struct {
 }
 
 type ScanCollector struct {
-	IfName string
-	Target ScanTarget
+	IfName  string
+	Target  ScanTarget
+	UseSudo bool
 }
 
-func (c ScanCollector) Collect() (model.Sample, error) {
-	networks, err := ScanNetworks(c.IfName)
+func (c *ScanCollector) Collect() (model.Sample, error) {
+	networks, usedSudo, err := ScanNetworksWithFallback(c.IfName, c.UseSudo)
 	if err != nil {
 		return model.Sample{}, err
 	}
+	c.UseSudo = usedSudo
 
 	sample, ok := PickTarget(networks, c.Target)
 	if !ok {
@@ -46,10 +49,28 @@ func (c ScanCollector) Collect() (model.Sample, error) {
 	return sample, nil
 }
 
-func ScanNetworks(ifname string) ([]model.Sample, error) {
-	out, err := exec.Command("iw", "dev", ifname, "scan").Output()
+func ScanNetworksWithFallback(ifname string, useSudo bool) ([]model.Sample, bool, error) {
+	networks, err := ScanNetworks(ifname, useSudo)
+	if err == nil {
+		return networks, useSudo, nil
+	}
+	if !useSudo && isPermissionError(err) {
+		networks, err = ScanNetworks(ifname, true)
+		if err == nil {
+			return networks, true, nil
+		}
+	}
+	return nil, useSudo, err
+}
+
+func ScanNetworks(ifname string, useSudo bool) ([]model.Sample, error) {
+	out, err := runIwScan(ifname, useSudo)
 	if err != nil {
-		return nil, fmt.Errorf("iw scan: %w", err)
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return nil, fmt.Errorf("iw scan: %w", err)
+		}
+		return nil, fmt.Errorf("iw scan: %w: %s", err, msg)
 	}
 	return ParseScanOutput(out, ifname)
 }
@@ -170,4 +191,29 @@ func parseSignal(line string) (int, bool) {
 		return 0, false
 	}
 	return int(math.Round(val)), true
+}
+
+func runIwScan(ifname string, useSudo bool) ([]byte, error) {
+	args := []string{"dev", ifname, "scan"}
+	if useSudo {
+		cmd := exec.Command("sudo", append([]string{"iw"}, args...)...)
+		cmd.Stdin = os.Stdin
+		cmd.Stderr = os.Stderr
+		return cmd.Output()
+	}
+	return exec.Command("iw", args...).CombinedOutput()
+}
+
+func isPermissionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "exit status 255") {
+		return true
+	}
+	return strings.Contains(msg, "not permitted") ||
+		strings.Contains(msg, "permission denied") ||
+		strings.Contains(msg, "not authorized") ||
+		strings.Contains(msg, "operation not permitted")
 }
