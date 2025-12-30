@@ -2,6 +2,8 @@
 
 Minimal MVP that scans Wi-Fi signal levels via `iw`, exposes an HTTP API + SSE, and renders a small radar/gauge UI.
 
+![WiFi Radar UI](image.webp)
+
 ## Run (scan mode, default)
 
 ```bash
