@@ -50,7 +50,7 @@ func main() {
 
 	flag.Var(&ifs, "if", "interface name to monitor (repeatable)")
 	flag.DurationVar(&interval, "interval", 500*time.Millisecond, "sampling interval")
-	flag.StringVar(&listen, "listen", "127.0.0.1:8888", "HTTP bind address")
+	flag.StringVar(&listen, "listen", "0.0.0.0:8888", "HTTP bind address")
 	flag.BoolVar(&public, "public", false, "bind 0.0.0.0 (overrides listen if set)")
 	flag.BoolVar(&askIf, "ask-if", false, "always ask which interface to use")
 	flag.BoolVar(&openBrowser, "open", true, "open Firefox after start")
@@ -101,7 +101,7 @@ func main() {
 	mux.HandleFunc("/api/best", apiHandler.Best)
 	mux.HandleFunc("/api/stream", apiHandler.Stream)
 
-	staticDir := filepath.Join(mustCwd(), "web", "static")
+	staticDir := resolveStaticDir()
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
 	collectors, err := buildCollectors(mode, []string(ifs), targetSSID, targetBSSID)
@@ -149,6 +149,42 @@ func mustCwd() string {
 		log.Fatalf("get cwd: %v", err)
 	}
 	return cwd
+}
+
+func resolveStaticDir() string {
+	if env := strings.TrimSpace(os.Getenv("WIFI_RADAR_STATIC_DIR")); env != "" {
+		if dirExists(env) {
+			return env
+		}
+		log.Fatalf("static dir not found in WIFI_RADAR_STATIC_DIR: %s", env)
+	}
+
+	cwd := mustCwd()
+	if dirExists(filepath.Join(cwd, "web", "static")) {
+		return filepath.Join(cwd, "web", "static")
+	}
+
+	exe, err := os.Executable()
+	if err == nil {
+		exeDir := filepath.Dir(exe)
+		if dirExists(filepath.Join(exeDir, "web", "static")) {
+			return filepath.Join(exeDir, "web", "static")
+		}
+		if dirExists(filepath.Join(exeDir, "..", "web", "static")) {
+			return filepath.Join(exeDir, "..", "web", "static")
+		}
+	}
+
+	log.Fatalf("static assets not found; set WIFI_RADAR_STATIC_DIR to the web/static folder")
+	return ""
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
 
 type sampler interface {

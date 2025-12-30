@@ -10,7 +10,7 @@ go run ./cmd/server
 
 or
 
-go run ./cmd/server --if wlp0s20f3 --interval 500ms --listen 127.0.0.1:8888
+go run ./cmd/server --if wlp0s20f3 --interval 500ms --listen 0.0.0.0:8888
 ```
 
 On start, it scans available networks and prompts you to pick one. The app then keeps scanning and tracks that network's RSSI without connecting. RX/TX rates are not available in scan mode.
@@ -39,6 +39,7 @@ go run ./cmd/server --if wlp0s20f3 --mode link
 
 - `iw dev <if> scan` often requires elevated permissions (CAP_NET_ADMIN or sudo).
 - Scan mode is the default; use `--mode link` for the previous behavior.
+- If you run the binary from outside the repo and see 404s, set `WIFI_RADAR_STATIC_DIR` to the `web/static` folder.
 
 ## Endpoints
 
