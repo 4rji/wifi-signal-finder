@@ -11,7 +11,7 @@ go run .
 
 or
 
-go run . scan --if wlp0s20f3 --interval 500ms --listen 0.0.0.0:8888
+go run . scan -i wlp0s20f3 --interval 500ms --listen 0.0.0.0:8888
 ```
 
 When run without a function, the CLI shows a menu so you can choose `scan` or `metrics`. In scan mode, it scans available networks and prompts you to pick one. The app then keeps scanning and tracks that network's RSSI without connecting. RX/TX rates are not available in scan mode.
@@ -21,13 +21,13 @@ The CLI prints the available functions at startup. You can also pass a function 
 You can skip the prompt:
 
 ```bash
-go run . scan --if wlp0s20f3 --ssid "MyWiFi"
+go run . scan -i wlp0s20f3 --ssid "MyWiFi"
 ```
 
 or:
 
 ```bash
-go run . scan --if wlp0s20f3 --bssid aa:bb:cc:dd:ee:ff
+go run . scan -i wlp0s20f3 --bssid aa:bb:cc:dd:ee:ff
 ```
 
 ## Run (link mode)
@@ -35,7 +35,7 @@ go run . scan --if wlp0s20f3 --bssid aa:bb:cc:dd:ee:ff
 If you are connected and want link metrics (RX/TX), use:
 
 ```bash
-go run . metrics --if wlp0s20f3
+go run . metrics -i wlp0s20f3
 ```
 
 ## Notes

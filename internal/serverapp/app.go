@@ -28,6 +28,7 @@ type availableFunction struct {
 	name        string
 	description string
 	mode        string
+	example     string
 	aliases     []string
 }
 
@@ -36,14 +37,28 @@ var startupFunctions = []availableFunction{
 		name:        "scan",
 		description: "Scan nearby Wi-Fi networks and track RSSI without connecting (default).",
 		mode:        "scan",
+		example:     `go run . scan -i wlp0s20f3 --ssid "MyWiFi"`,
 	},
 	{
 		name:        "metrics",
 		description: "Monitor the connected link with signal, RX Mbps, and TX Mbps (--mode link).",
 		mode:        "link",
+		example:     "go run . metrics -i wlp0s20f3",
 		aliases:     []string{"metric", "metrix", "link"},
 	},
 }
+
+const (
+	ansiReset   = "\033[0m"
+	ansiBold    = "\033[1m"
+	ansiDim     = "\033[2m"
+	ansiRed     = "\033[31m"
+	ansiGreen   = "\033[32m"
+	ansiYellow  = "\033[33m"
+	ansiBlue    = "\033[34m"
+	ansiMagenta = "\033[35m"
+	ansiCyan    = "\033[36m"
+)
 
 func (i *ifList) String() string {
 	return fmt.Sprintf("%v", *i)
@@ -74,7 +89,7 @@ func Run(args []string) {
 	showedMenu := false
 
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	flags.Var(&ifs, "if", "interface name to monitor (repeatable)")
+	flags.Var(&ifs, "i", "interface name to monitor (repeatable)")
 	flags.DurationVar(&interval, "interval", 500*time.Millisecond, "sampling interval")
 	flags.StringVar(&listen, "listen", "0.0.0.0:8888", "HTTP bind address")
 	flags.BoolVar(&public, "public", false, "bind 0.0.0.0 (overrides listen if set)")
@@ -129,7 +144,7 @@ func Run(args []string) {
 			log.Fatalf("list interfaces: %v", err)
 		}
 		if len(detected) == 0 {
-			log.Fatalf("no interfaces found; use --if <ifname>")
+			log.Fatalf("no interfaces found; use -i <ifname>")
 		}
 		if len(detected) == 1 && !askIf {
 			ifs = append(ifs, detected[0])
@@ -174,37 +189,50 @@ func Run(args []string) {
 
 func printUsage(flags *flag.FlagSet) {
 	out := flags.Output()
-	fmt.Fprintf(out, "Usage: %s [function] [options]\n\n", os.Args[0])
+	fmt.Fprintf(out, "%s go run . [function] [options]\n\n", paint("Usage:", ansiBold, ansiCyan))
 	printAvailableFunctions(out)
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Examples:")
-	fmt.Fprintf(out, "  %s\n", os.Args[0])
-	fmt.Fprintf(out, "  %s scan\n", os.Args[0])
-	fmt.Fprintf(out, "  %s metrics --if wlp0s20f3\n", os.Args[0])
+	fmt.Fprintln(out, paint("Examples:", ansiBold, ansiYellow))
+	fmt.Fprintf(out, "  %s\n", paint("go run .", ansiBlue))
+	for _, fn := range startupFunctions {
+		fmt.Fprintf(out, "  %s\n", paint(fn.example, ansiBlue))
+	}
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Options:")
+	fmt.Fprintln(out, paint("Options:", ansiBold, ansiYellow))
 	flags.PrintDefaults()
 }
 
 func printStartupInfo(w io.Writer, function string, mode string, listen string, includeFunctions bool) {
 	if includeFunctions {
-		fmt.Fprintln(w, "WiFi Radar")
+		fmt.Fprintln(w, paint("WiFi Radar", ansiBold, ansiCyan))
 		printAvailableFunctions(w)
 	}
 	if function != "" {
-		fmt.Fprintf(w, "Selected function: %s\n", function)
+		fmt.Fprintf(w, "%s %s\n", paint("Selected function:", ansiBold, ansiYellow), paint(function, ansiGreen, ansiBold))
 	}
-	fmt.Fprintf(w, "Selected mode: %s\n", mode)
-	fmt.Fprintf(w, "Listening: http://%s/\n", listen)
-	fmt.Fprintln(w, "Use --help to see all flags.")
+	fmt.Fprintf(w, "%s %s\n", paint("Selected mode:", ansiBold, ansiYellow), paint(mode, ansiGreen))
+	fmt.Fprintf(w, "%s %s\n", paint("Listening:", ansiBold, ansiYellow), paint(fmt.Sprintf("http://%s/", listen), ansiBlue))
+	fmt.Fprintln(w, paint("Use --help to see all flags.", ansiDim))
 	fmt.Fprintln(w)
 }
 
 func printAvailableFunctions(w io.Writer) {
-	fmt.Fprintln(w, "Available functions:")
+	fmt.Fprintln(w, paint("Available functions:", ansiBold, ansiYellow))
 	for _, fn := range startupFunctions {
-		fmt.Fprintf(w, "  %-13s %s\n", fn.name, fn.description)
+		fmt.Fprintf(w, "  %s %s\n", paint(fmt.Sprintf("%-13s", fn.name), ansiGreen, ansiBold), paint(fn.description, ansiDim))
+		fmt.Fprintf(w, "  %s %s\n", paint("command:", ansiYellow), paint(fn.example, ansiBlue))
 	}
+}
+
+func paint(text string, styles ...string) string {
+	if colorDisabled() {
+		return text
+	}
+	return strings.Join(styles, "") + text + ansiReset
+}
+
+func colorDisabled() bool {
+	return os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb"
 }
 
 func extractFunction(args []string) (availableFunction, []string, bool) {
@@ -263,17 +291,17 @@ func promptFunction(functions []availableFunction) (availableFunction, error) {
 		return availableFunction{}, errors.New("no functions available")
 	}
 
-	fmt.Println("WiFi Radar")
+	fmt.Println(paint("WiFi Radar", ansiBold, ansiCyan))
 	printAvailableFunctions(os.Stdout)
 	fmt.Println()
-	fmt.Println("Select function:")
+	fmt.Println(paint("Select function:", ansiBold, ansiYellow))
 	for i, fn := range functions {
-		fmt.Printf("  %d) %s\n", i+1, fn.name)
+		fmt.Printf("  %s %s\n", paint(fmt.Sprintf("%d)", i+1), ansiYellow, ansiBold), paint(fn.name, ansiGreen, ansiBold))
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("Enter number or name: ")
+		fmt.Print(paint("Enter number or name: ", ansiMagenta, ansiBold))
 		text, err := reader.ReadString('\n')
 		if err != nil {
 			return availableFunction{}, err
@@ -287,11 +315,11 @@ func promptFunction(functions []availableFunction) (availableFunction, error) {
 		}
 		var choice int
 		if _, err := fmt.Sscanf(text, "%d", &choice); err != nil {
-			fmt.Println("Invalid function.")
+			fmt.Println(paint("Invalid function.", ansiRed, ansiBold))
 			continue
 		}
 		if choice < 1 || choice > len(functions) {
-			fmt.Println("Out of range.")
+			fmt.Println(paint("Out of range.", ansiRed, ansiBold))
 			continue
 		}
 		return functions[choice-1], nil
@@ -433,7 +461,7 @@ func promptNetwork(networks []model.Sample) (collector.ScanTarget, error) {
 		return networks[i].SignalDBM > networks[j].SignalDBM
 	})
 
-	fmt.Println("Select network to track:")
+	fmt.Println(paint("Select network to track:", ansiBold, ansiYellow))
 	for i, n := range networks {
 		ssid := n.SSID
 		if ssid == "" {
@@ -447,12 +475,18 @@ func promptNetwork(networks []model.Sample) (collector.ScanTarget, error) {
 		if n.FreqMHz != 0 {
 			freq = fmt.Sprintf("%d MHz", n.FreqMHz)
 		}
-		fmt.Printf("  %d) %s  %s  %s  %s\n", i+1, ssid, n.BSSID, signal, freq)
+		fmt.Printf("  %s %s  %s  %s  %s\n",
+			paint(fmt.Sprintf("%d)", i+1), ansiYellow, ansiBold),
+			paint(ssid, ansiGreen, ansiBold),
+			paint(n.BSSID, ansiDim),
+			paint(signal, ansiCyan),
+			paint(freq, ansiBlue),
+		)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("Enter number: ")
+		fmt.Print(paint("Enter number: ", ansiMagenta, ansiBold))
 		text, err := reader.ReadString('\n')
 		if err != nil {
 			return collector.ScanTarget{}, err
@@ -463,11 +497,11 @@ func promptNetwork(networks []model.Sample) (collector.ScanTarget, error) {
 		}
 		var choice int
 		if _, err := fmt.Sscanf(text, "%d", &choice); err != nil {
-			fmt.Println("Invalid number.")
+			fmt.Println(paint("Invalid number.", ansiRed, ansiBold))
 			continue
 		}
 		if choice < 1 || choice > len(networks) {
-			fmt.Println("Out of range.")
+			fmt.Println(paint("Out of range.", ansiRed, ansiBold))
 			continue
 		}
 		selected := networks[choice-1]
@@ -502,14 +536,14 @@ func listInterfaces() ([]string, error) {
 }
 
 func promptInterface(ifs []string) (string, error) {
-	fmt.Println("Select interface:")
+	fmt.Println(paint("Select interface:", ansiBold, ansiYellow))
 	for i, name := range ifs {
-		fmt.Printf("  %d) %s\n", i+1, name)
+		fmt.Printf("  %s %s\n", paint(fmt.Sprintf("%d)", i+1), ansiYellow, ansiBold), paint(name, ansiGreen, ansiBold))
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("Enter number: ")
+		fmt.Print(paint("Enter number: ", ansiMagenta, ansiBold))
 		text, err := reader.ReadString('\n')
 		if err != nil {
 			return "", err
@@ -520,11 +554,11 @@ func promptInterface(ifs []string) (string, error) {
 		}
 		var choice int
 		if _, err := fmt.Sscanf(text, "%d", &choice); err != nil {
-			fmt.Println("Invalid number.")
+			fmt.Println(paint("Invalid number.", ansiRed, ansiBold))
 			continue
 		}
 		if choice < 1 || choice > len(ifs) {
-			fmt.Println("Out of range.")
+			fmt.Println(paint("Out of range.", ansiRed, ansiBold))
 			continue
 		}
 		return ifs[choice-1], nil
