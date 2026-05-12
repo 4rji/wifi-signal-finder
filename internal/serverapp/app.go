@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -82,6 +83,7 @@ func Run(args []string) {
 		public      bool
 		askIf       bool
 		openBrowser bool
+		raspberryUI bool
 		mode        string
 		targetSSID  string
 		targetBSSID string
@@ -96,7 +98,8 @@ func Run(args []string) {
 	flags.StringVar(&listen, "listen", "0.0.0.0:8888", "HTTP bind address")
 	flags.BoolVar(&public, "public", false, "bind 0.0.0.0 (overrides listen if set)")
 	flags.BoolVar(&askIf, "ask-if", false, "always ask which interface to use")
-	flags.BoolVar(&openBrowser, "open", true, "open Firefox after start")
+	flags.BoolVar(&openBrowser, "open", true, "open browser after start")
+	flags.BoolVar(&raspberryUI, "rb", false, "serve compact Raspberry Pi 2.4 inch display UI")
 	flags.StringVar(&mode, "mode", "scan", "collection mode: scan or link")
 	flags.StringVar(&targetSSID, "ssid", "", "target SSID for scan mode")
 	flags.StringVar(&targetBSSID, "bssid", "", "target BSSID for scan mode")
@@ -113,7 +116,7 @@ func Run(args []string) {
 
 	if hasFunction {
 		mode = selectedFunction.mode
-	} else if !flagWasSet(flags, "mode") {
+	} else if !flagWasSet(flags, "mode") && !raspberryUI {
 		var err error
 		selectedFunction, err = promptFunction(startupFunctions)
 		if err != nil {
@@ -138,7 +141,7 @@ func Run(args []string) {
 	if selectedFunction.name == "" {
 		selectedFunction = functionForMode(mode)
 	}
-	printStartupInfo(os.Stdout, selectedFunction.name, mode, listen, !showedMenu)
+	printStartupInfo(os.Stdout, selectedFunction.name, mode, listen, !showedMenu, raspberryUI)
 
 	if len(ifs) == 0 {
 		detected, err := listInterfaces()
@@ -171,7 +174,7 @@ func Run(args []string) {
 	mux.HandleFunc("/api/best", apiHandler.Best)
 	mux.HandleFunc("/api/stream", apiHandler.Stream)
 
-	mux.Handle("/", http.FileServer(resolveStaticFileSystem()))
+	mux.Handle("/", staticHandler(resolveStaticFileSystem(), raspberryUI))
 
 	collectors, err := buildCollectors(mode, []string(ifs), targetSSID, targetBSSID)
 	if err != nil {
@@ -181,7 +184,7 @@ func Run(args []string) {
 
 	log.Printf("listening on http://%s", listen)
 	if openBrowser {
-		go openFirefox(listen)
+		go openBrowserForDisplay(listen, raspberryUI)
 	}
 	if err := http.ListenAndServe(listen, mux); err != nil {
 		log.Fatal(err)
@@ -203,7 +206,7 @@ func printUsage(flags *flag.FlagSet) {
 	flags.PrintDefaults()
 }
 
-func printStartupInfo(w io.Writer, function string, mode string, listen string, includeFunctions bool) {
+func printStartupInfo(w io.Writer, function string, mode string, listen string, includeFunctions bool, raspberryUI bool) {
 	if includeFunctions {
 		fmt.Fprintln(w, paint("WiFi Radar", ansiBold, ansiCyan))
 		printAvailableFunctions(w)
@@ -212,6 +215,9 @@ func printStartupInfo(w io.Writer, function string, mode string, listen string, 
 		fmt.Fprintf(w, "%s %s\n", paint("Selected function:", ansiBold, ansiYellow), paint(function, ansiGreen, ansiBold))
 	}
 	fmt.Fprintf(w, "%s %s\n", paint("Selected mode:", ansiBold, ansiYellow), paint(mode, ansiGreen))
+	if raspberryUI {
+		fmt.Fprintf(w, "%s %s\n", paint("Display UI:", ansiBold, ansiYellow), paint("Raspberry Pi 2.4 inch", ansiGreen))
+	}
 	fmt.Fprintf(w, "%s %s\n", paint("Listening:", ansiBold, ansiYellow), paint(fmt.Sprintf("http://%s/", listen), ansiBlue))
 	fmt.Fprintln(w, paint("Use --help to see all flags.", ansiDim))
 	fmt.Fprintln(w)
@@ -388,6 +394,37 @@ func resolveStaticFileSystem() http.FileSystem {
 		log.Fatalf("embedded static assets unavailable: %v", err)
 	}
 	return http.FS(staticFS)
+}
+
+func staticHandler(staticFS http.FileSystem, raspberryUI bool) http.Handler {
+	fileServer := http.FileServer(staticFS)
+	if !raspberryUI {
+		return fileServer
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			serveStaticFile(w, r, staticFS, "rb.html")
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+}
+
+func serveStaticFile(w http.ResponseWriter, r *http.Request, staticFS http.FileSystem, name string) {
+	file, err := staticFS.Open(name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeContent(w, r, name, info.ModTime(), file)
 }
 
 func dirExists(path string) bool {
@@ -569,11 +606,30 @@ func promptInterface(ifs []string) (string, error) {
 	}
 }
 
-func openFirefox(listen string) {
+func openBrowserForDisplay(listen string, raspberryUI bool) {
 	time.Sleep(300 * time.Millisecond)
-	url := fmt.Sprintf("http://%s/", listen)
+	url := browserURL(listen)
+	if raspberryUI {
+		args := []string{"--kiosk", "--disable-infobars", "--noerrdialogs", url}
+		for _, name := range []string{"chromium-browser", "chromium"} {
+			if err := exec.Command(name, args...).Start(); err == nil {
+				return
+			}
+		}
+	}
 	if err := exec.Command("firefox", url).Start(); err == nil {
 		return
 	}
 	_ = exec.Command("xdg-open", url).Start()
+}
+
+func browserURL(listen string) string {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return fmt.Sprintf("http://%s/", listen)
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/"
 }

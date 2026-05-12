@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WiFi Radar RB</title>
+    <link rel="stylesheet" href="rb.css" />
+  </head>
+  <body>
+    <main class="rb-screen">
+      <section class="signal-panel" aria-live="polite">
+        <header class="topline">
+          <span class="chip" id="ifname">--</span>
+          <span class="chip right" id="freq">--</span>
+        </header>
+
+        <div class="radar-stage">
+          <div class="radar" id="radar" aria-hidden="true">
+            <div class="sweep"></div>
+            <div class="pulse" id="pulse"></div>
+            <span class="ring outer"></span>
+            <span class="ring middle"></span>
+            <span class="ring inner"></span>
+            <span class="center-dot"></span>
+          </div>
+
+          <div class="readout">
+            <div class="readout-main">
+              <span id="signal-db">--</span><span class="unit">dBm</span>
+            </div>
+            <p id="quality">Sin datos</p>
+          </div>
+        </div>
+
+        <footer class="details">
+          <strong id="ssid">--</strong>
+          <span id="bssid">--</span>
+        </footer>
+
+        <div class="quality-bar" aria-hidden="true">
+          <div id="quality-bar"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="rb.js"></script>
+  </body>
+</html>

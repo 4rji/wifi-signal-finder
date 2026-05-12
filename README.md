@@ -38,6 +38,30 @@ If you are connected and want link metrics (RX/TX), use:
 go run . metrics -i wlp0s20f3
 ```
 
+## Raspberry Pi 2.4 inch display
+
+Use `-rb` to serve the compact Raspberry display UI. It replaces the desktop dashboard at `/` with a small screen that only shows the spinning radar wheel, current dBm, quality, SSID, BSSID, interface, and frequency.
+
+Build for Raspberry Pi 2:
+
+```bash
+GOOS=linux GOARCH=arm GOARM=7 go build -o wifi-radar .
+```
+
+Run it on the Pi:
+
+```bash
+sudo ./wifi-radar scan -i wlan0 --ssid "MyWiFi" -rb --listen 127.0.0.1:8888 --open=false
+```
+
+Open the 2.4 inch screen in Chromium kiosk:
+
+```bash
+chromium-browser --kiosk --disable-infobars --noerrdialogs http://127.0.0.1:8888/
+```
+
+If you run with `-rb` and leave `--open=true`, the app tries to launch Chromium in kiosk mode automatically, then falls back to Firefox/xdg-open.
+
 ## Notes
 
 - `iw dev <if> scan` often requires elevated permissions (CAP_NET_ADMIN or sudo).
