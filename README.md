@@ -41,7 +41,7 @@ go run . metrics --if wlp0s20f3
 ## Notes
 
 - `iw dev <if> scan` often requires elevated permissions (CAP_NET_ADMIN or sudo).
-- Scan mode is the default; use `--mode link` for the previous behavior.
+- Use `metrics` or `--mode link` for the previous link-metrics behavior.
 - If you run the binary from outside the repo and see 404s, set `WIFI_RADAR_STATIC_DIR` to the `web/static` folder.
 
 ## Endpoints
