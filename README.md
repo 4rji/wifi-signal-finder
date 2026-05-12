@@ -42,7 +42,7 @@ go run . metrics -i wlp0s20f3
 
 - `iw dev <if> scan` often requires elevated permissions (CAP_NET_ADMIN or sudo).
 - Use `metrics` or `--mode link` for the previous link-metrics behavior.
-- If you run the binary from outside the repo and see 404s, set `WIFI_RADAR_STATIC_DIR` to the `web/static` folder.
+- Compiled binaries include the web UI assets. Set `WIFI_RADAR_STATIC_DIR` to `web/static` only when you want to override them during development.
 
 ## Endpoints
 

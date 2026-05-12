@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"wifi-radar/internal/collector"
 	"wifi-radar/internal/model"
 	"wifi-radar/internal/store"
+	webassets "wifi-radar/web"
 )
 
 type ifList []string
@@ -169,8 +171,7 @@ func Run(args []string) {
 	mux.HandleFunc("/api/best", apiHandler.Best)
 	mux.HandleFunc("/api/stream", apiHandler.Stream)
 
-	staticDir := resolveStaticDir()
-	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
+	mux.Handle("/", http.FileServer(resolveStaticFileSystem()))
 
 	collectors, err := buildCollectors(mode, []string(ifs), targetSSID, targetBSSID)
 	if err != nil {
@@ -358,32 +359,35 @@ func mustCwd() string {
 	return cwd
 }
 
-func resolveStaticDir() string {
+func resolveStaticFileSystem() http.FileSystem {
 	if env := strings.TrimSpace(os.Getenv("WIFI_RADAR_STATIC_DIR")); env != "" {
 		if dirExists(env) {
-			return env
+			return http.Dir(env)
 		}
 		log.Fatalf("static dir not found in WIFI_RADAR_STATIC_DIR: %s", env)
 	}
 
 	cwd := mustCwd()
 	if dirExists(filepath.Join(cwd, "web", "static")) {
-		return filepath.Join(cwd, "web", "static")
+		return http.Dir(filepath.Join(cwd, "web", "static"))
 	}
 
 	exe, err := os.Executable()
 	if err == nil {
 		exeDir := filepath.Dir(exe)
 		if dirExists(filepath.Join(exeDir, "web", "static")) {
-			return filepath.Join(exeDir, "web", "static")
+			return http.Dir(filepath.Join(exeDir, "web", "static"))
 		}
 		if dirExists(filepath.Join(exeDir, "..", "web", "static")) {
-			return filepath.Join(exeDir, "..", "web", "static")
+			return http.Dir(filepath.Join(exeDir, "..", "web", "static"))
 		}
 	}
 
-	log.Fatalf("static assets not found; set WIFI_RADAR_STATIC_DIR to the web/static folder")
-	return ""
+	staticFS, err := fs.Sub(webassets.Static, "static")
+	if err != nil {
+		log.Fatalf("embedded static assets unavailable: %v", err)
+	}
+	return http.FS(staticFS)
 }
 
 func dirExists(path string) bool {
