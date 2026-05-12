@@ -60,7 +60,57 @@ Open the 2.4 inch screen in Chromium kiosk:
 chromium-browser --kiosk --disable-infobars --noerrdialogs http://127.0.0.1:8888/
 ```
 
-If you run with `-rb` and leave `--open=true`, the app tries to launch Chromium in kiosk mode automatically, then falls back to Firefox/xdg-open.
+Or with Firefox:
+
+```bash
+firefox --kiosk http://127.0.0.1:8888/
+```
+
+If you run with `-rb` and leave `--open=true`, the app tries to launch Chromium in kiosk mode automatically, then Firefox in kiosk mode, then falls back to xdg-open. Run services with `--open=false`; browser autostart needs a graphical session.
+
+### Start at boot
+
+Run the scanner as a system service:
+
+```ini
+[Unit]
+Description=WiFi Radar
+After=network.target
+
+[Service]
+ExecStart=/home/pi/wifi-radar scan -i wlan0 --ssid=MyWiFi -rb --listen 127.0.0.1:8888 --open=false
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save that as `/etc/systemd/system/wifi-radar.service`, then run:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now wifi-radar.service
+```
+
+Start the kiosk browser from the desktop session, not from the system service. Create `/home/pi/.config/autostart/wifi-radar-kiosk.desktop`:
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=WiFi Radar Kiosk
+Exec=sh -c 'sleep 5; firefox --kiosk http://127.0.0.1:8888/'
+X-GNOME-Autostart-enabled=true
+```
+
+If the Pi boots to console only, enable desktop autologin:
+
+```bash
+sudo raspi-config nonint do_boot_behaviour B4
+sudo reboot
+```
+
+`Error: no DISPLAY environment variable specified` means the browser was started without a graphical desktop/X session. If you installed Raspberry Pi OS Lite, install a desktop or a minimal X session before using kiosk mode.
 
 ## Notes
 

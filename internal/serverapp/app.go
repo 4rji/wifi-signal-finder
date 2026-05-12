@@ -616,6 +616,11 @@ func openBrowserForDisplay(listen string, raspberryUI bool) {
 				return
 			}
 		}
+		for _, name := range []string{"firefox", "firefox-esr"} {
+			if err := exec.Command(name, "--kiosk", url).Start(); err == nil {
+				return
+			}
+		}
 	}
 	if err := exec.Command("firefox", url).Start(); err == nil {
 		return
