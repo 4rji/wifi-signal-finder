@@ -7,26 +7,27 @@ Minimal MVP that scans Wi-Fi signal levels via `iw`, exposes an HTTP API + SSE, 
 ## Run (scan mode, default)
 
 ```bash
-
-go run ./cmd/server
+go run .
 
 or
 
-go run ./cmd/server --if wlp0s20f3 --interval 500ms --listen 0.0.0.0:8888
+go run . scan --if wlp0s20f3 --interval 500ms --listen 0.0.0.0:8888
 ```
 
-On start, it scans available networks and prompts you to pick one. The app then keeps scanning and tracks that network's RSSI without connecting. RX/TX rates are not available in scan mode.
+When run without a function, the CLI shows a menu so you can choose `scan` or `metrics`. In scan mode, it scans available networks and prompts you to pick one. The app then keeps scanning and tracks that network's RSSI without connecting. RX/TX rates are not available in scan mode.
+
+The CLI prints the available functions at startup. You can also pass a function directly, such as `go run . scan` or `go run . metrics`. The aliases `metric`, `metrix`, and `link` also start metrics mode. Use `--help` to show the same function list with all flags.
 
 You can skip the prompt:
 
 ```bash
-go run ./cmd/server --if wlp0s20f3 --ssid "MyWiFi"
+go run . scan --if wlp0s20f3 --ssid "MyWiFi"
 ```
 
 or:
 
 ```bash
-go run ./cmd/server --if wlp0s20f3 --bssid aa:bb:cc:dd:ee:ff
+go run . scan --if wlp0s20f3 --bssid aa:bb:cc:dd:ee:ff
 ```
 
 ## Run (link mode)
@@ -34,7 +35,7 @@ go run ./cmd/server --if wlp0s20f3 --bssid aa:bb:cc:dd:ee:ff
 If you are connected and want link metrics (RX/TX), use:
 
 ```bash
-go run ./cmd/server --if wlp0s20f3 --mode link
+go run . metrics --if wlp0s20f3
 ```
 
 ## Notes
