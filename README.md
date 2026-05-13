@@ -42,7 +42,7 @@ go run . metrics -i wlp0s20f3
 
 Use `-rb` to serve the Raspberry touchscreen UI. It replaces the desktop dashboard at `/` with a 7 inch layout that shows the spinning radar, current dBm, signal quality, BSSID, interface, frequency, channel, last-seen time, and a touch-friendly list of nearby Wi-Fi networks.
 
-In Raspberry mode, scan mode no longer asks you to pick a network in the terminal when `--ssid` or `--bssid` is omitted. The UI starts in auto-strongest mode, lists nearby networks on screen, and lets you tap a network to track it. Tap `Auto` to return to the strongest visible network or `Refresh` to rescan the list.
+In Raspberry mode, scan mode no longer asks you to pick a network in the terminal when `--ssid` or `--bssid` is omitted. The UI starts in auto-strongest mode, shows four nearby networks per page, and lets you tap a page number and then tap a network to track it. Tap `Auto` to return to the strongest visible network or `Refresh` to rescan the list. The touchscreen UI also includes an interface selector, so you can switch from `wlan0` to another detected Wi-Fi interface without restarting.
 
 Build for Raspberry Pi 2:
 
@@ -134,3 +134,5 @@ sudo reboot
 - `GET /api/networks`
 - `GET /api/target`
 - `POST /api/target`
+- `GET /api/interfaces`
+- `POST /api/interfaces`

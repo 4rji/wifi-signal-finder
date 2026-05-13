@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"wifi-radar/internal/collector"
@@ -15,13 +16,18 @@ import (
 
 type NetworkScanner interface {
 	ListNetworks() ([]model.Sample, error)
+	CurrentInterface() string
+	SetInterface(string)
 	CurrentTarget() collector.ScanTarget
 	SetTarget(collector.ScanTarget)
 }
 
+type InterfaceLister func() ([]string, error)
+
 type API struct {
-	Store   *store.Store
-	Scanner NetworkScanner
+	Store           *store.Store
+	Scanner         NetworkScanner
+	InterfaceLister InterfaceLister
 }
 
 func (a API) Status(w http.ResponseWriter, r *http.Request) {
@@ -131,11 +137,76 @@ func (a API) Target(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a API) Interfaces(w http.ResponseWriter, r *http.Request) {
+	if a.Scanner == nil || a.InterfaceLister == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		a.writeInterfaces(w)
+	case http.MethodPost:
+		var payload struct {
+			IfName string `json:"ifname"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		if err := dec.Decode(&payload); err != nil {
+			http.Error(w, "invalid interface payload", http.StatusBadRequest)
+			return
+		}
+		ifname := strings.TrimSpace(payload.IfName)
+		if ifname == "" {
+			http.Error(w, "interface name is required", http.StatusBadRequest)
+			return
+		}
+		if err := a.ensureKnownInterface(ifname); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		a.Scanner.SetInterface(ifname)
+		if a.Store != nil {
+			a.Store.Clear()
+		}
+		a.writeInterfaces(w)
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(v)
+}
+
+func (a API) writeInterfaces(w http.ResponseWriter) {
+	ifs, err := a.InterfaceLister()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, struct {
+		Interfaces []string `json:"interfaces"`
+		Selected   string   `json:"selected"`
+	}{
+		Interfaces: ifs,
+		Selected:   a.Scanner.CurrentInterface(),
+	})
+}
+
+func (a API) ensureKnownInterface(ifname string) error {
+	ifs, err := a.InterfaceLister()
+	if err != nil {
+		return err
+	}
+	for _, candidate := range ifs {
+		if candidate == ifname {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown interface: %s", ifname)
 }
 
 func writeTarget(w http.ResponseWriter, target collector.ScanTarget) {

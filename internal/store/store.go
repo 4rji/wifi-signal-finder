@@ -47,6 +47,19 @@ func (s *Store) Update(sample model.Sample) {
 	s.mu.Unlock()
 }
 
+func (s *Store) Clear() {
+	s.mu.Lock()
+	s.histories = make(map[string]*history)
+	status := s.latestStatusLocked()
+	for ch := range s.subscribers {
+		select {
+		case ch <- status:
+		default:
+		}
+	}
+	s.mu.Unlock()
+}
+
 func (s *Store) LatestStatus() model.Status {
 	s.mu.RLock()
 	status := s.latestStatusLocked()

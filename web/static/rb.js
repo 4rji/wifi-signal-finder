@@ -1,5 +1,6 @@
 const elements = {
-  ifname: document.getElementById("ifname"),
+  interfaceControl: document.getElementById("interface-control"),
+  interfaceSelect: document.getElementById("interface-select"),
   freq: document.getElementById("freq"),
   channel: document.getElementById("channel"),
   signal: document.getElementById("signal-db"),
@@ -15,17 +16,25 @@ const elements = {
   statusLine: document.getElementById("status-line"),
   scanCount: document.getElementById("scan-count"),
   networkList: document.getElementById("network-list"),
+  networkPages: document.getElementById("network-pages"),
   refreshNetworks: document.getElementById("refresh-networks"),
   autoTarget: document.getElementById("auto-target"),
 };
 
+const NETWORK_PAGE_SIZE = 4;
+
 const state = {
   lastUpdate: 0,
   lastSample: null,
+  interfaces: [],
+  selectedInterface: "",
+  interfacePickerAvailable: true,
   networks: [],
+  networkPage: 0,
   target: { ssid: "", bssid: "" },
   networkPickerAvailable: true,
   loadingNetworks: false,
+  networkError: "",
 };
 
 function normalizeSignal(signalDbm) {
@@ -40,7 +49,13 @@ function pickBestSample(samples) {
   if (!samples || samples.length === 0) {
     return null;
   }
-  return samples.reduce((best, current) => {
+  const candidates = state.selectedInterface
+    ? samples.filter((sample) => sample.ifname === state.selectedInterface)
+    : samples;
+  if (candidates.length === 0) {
+    return null;
+  }
+  return candidates.reduce((best, current) => {
     if (!best || current.signal_dbm > best.signal_dbm) {
       return current;
     }
@@ -129,6 +144,9 @@ function isSelectedNetwork(sample) {
   if (state.target.ssid) {
     return sample.ssid === state.target.ssid;
   }
+  if (state.lastSample && state.lastSample.bssid) {
+    return (state.lastSample.bssid || "").toLowerCase() === sampleBSSID;
+  }
   return false;
 }
 
@@ -139,10 +157,13 @@ function updateReadout(sample) {
 
   state.lastUpdate = Date.now();
   state.lastSample = sample;
+  if (sample.ifname && !state.selectedInterface) {
+    state.selectedInterface = sample.ifname;
+  }
   document.documentElement.style.setProperty("--signal-color", tone.color);
   document.documentElement.style.setProperty("--signal-rgb", tone.rgb);
 
-  elements.ifname.textContent = sample.ifname || "--";
+  updateInterfaceValue();
   elements.freq.textContent = formatFrequency(sample.freq_mhz);
   elements.channel.textContent = channelFromFrequency(sample.freq_mhz);
   elements.signal.textContent = signal === null || signal === undefined ? "--" : signal;
@@ -172,6 +193,7 @@ function handleStatus(status) {
 
 function setEmptyList(message) {
   elements.networkList.replaceChildren();
+  elements.networkPages.replaceChildren();
   const empty = document.createElement("p");
   empty.className = "empty-state";
   empty.textContent = message;
@@ -217,6 +239,39 @@ function makeNetworkRow(network) {
   return row;
 }
 
+function renderPager(totalPages) {
+  elements.networkPages.replaceChildren();
+  if (totalPages <= 1) {
+    return;
+  }
+
+  const previous = makePageButton("Prev", state.networkPage - 1, state.networkPage === 0);
+  elements.networkPages.append(previous);
+  const firstPage = Math.min(Math.max(0, state.networkPage - 1), Math.max(0, totalPages - 3));
+  const lastPage = Math.min(totalPages, firstPage + 3);
+  for (let page = firstPage; page < lastPage; page += 1) {
+    elements.networkPages.append(makePageButton(String(page + 1), page, false, page === state.networkPage));
+  }
+  const next = makePageButton("Next", state.networkPage + 1, state.networkPage >= totalPages - 1);
+  elements.networkPages.append(next);
+}
+
+function makePageButton(label, page, disabled, active = false) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "page-button";
+  if (active) {
+    button.classList.add("active");
+  }
+  button.disabled = disabled;
+  button.textContent = label;
+  button.addEventListener("click", () => {
+    state.networkPage = page;
+    renderNetworks();
+  });
+  return button;
+}
+
 function renderNetworks() {
   if (!state.networkPickerAvailable) {
     setEmptyList("Network selection is available in scan mode");
@@ -228,18 +283,119 @@ function renderNetworks() {
     elements.scanCount.textContent = "Scanning";
     return;
   }
+  if (state.networkError && state.networks.length === 0) {
+    setEmptyList(state.networkError);
+    elements.scanCount.textContent = "Scan error";
+    return;
+  }
   if (state.networks.length === 0) {
     setEmptyList("No networks found");
     elements.scanCount.textContent = "0 found";
     return;
   }
 
+  const totalPages = Math.max(1, Math.ceil(state.networks.length / NETWORK_PAGE_SIZE));
+  state.networkPage = Math.min(Math.max(0, state.networkPage), totalPages - 1);
+  const start = state.networkPage * NETWORK_PAGE_SIZE;
+  const pageNetworks = state.networks.slice(start, start + NETWORK_PAGE_SIZE);
   const fragment = document.createDocumentFragment();
-  state.networks.forEach((network) => {
+  pageNetworks.forEach((network) => {
     fragment.append(makeNetworkRow(network));
   });
   elements.networkList.replaceChildren(fragment);
-  elements.scanCount.textContent = `${state.networks.length} found`;
+  const end = Math.min(start + pageNetworks.length, state.networks.length);
+  elements.scanCount.textContent = `${start + 1}-${end} of ${state.networks.length}`;
+  renderPager(totalPages);
+}
+
+function renderInterfaces() {
+  if (!state.interfacePickerAvailable) {
+    elements.interfaceControl.hidden = true;
+    return;
+  }
+
+  elements.interfaceControl.hidden = false;
+  elements.interfaceSelect.replaceChildren();
+  if (state.interfaces.length === 0) {
+    const option = document.createElement("option");
+    option.textContent = "No interfaces";
+    option.value = "";
+    elements.interfaceSelect.append(option);
+    elements.interfaceSelect.disabled = true;
+    return;
+  }
+
+  state.interfaces.forEach((ifname) => {
+    const option = document.createElement("option");
+    option.textContent = ifname;
+    option.value = ifname;
+    elements.interfaceSelect.append(option);
+  });
+  elements.interfaceSelect.disabled = false;
+  updateInterfaceValue();
+}
+
+function updateInterfaceValue() {
+  if (!elements.interfaceSelect || !state.selectedInterface) {
+    return;
+  }
+  if (elements.interfaceSelect.value !== state.selectedInterface) {
+    elements.interfaceSelect.value = state.selectedInterface;
+  }
+}
+
+async function loadInterfaces() {
+  try {
+    const res = await fetch("/api/interfaces");
+    if (res.status === 404) {
+      state.interfacePickerAvailable = false;
+      renderInterfaces();
+      return;
+    }
+    if (!res.ok) {
+      throw new Error(`Interface request failed: ${res.status}`);
+    }
+    const data = await res.json();
+    state.interfaces = data.interfaces || [];
+    state.selectedInterface = data.selected || state.selectedInterface;
+    renderInterfaces();
+  } catch (err) {
+    console.warn("Interface request failed", err);
+    state.interfacePickerAvailable = false;
+    renderInterfaces();
+  }
+}
+
+async function selectInterface(ifname) {
+  if (!ifname || ifname === state.selectedInterface) {
+    return;
+  }
+  try {
+    const res = await fetch("/api/interfaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ifname }),
+    });
+    if (!res.ok) {
+      throw new Error(`Interface update failed: ${res.status}`);
+    }
+    const data = await res.json();
+    state.interfaces = data.interfaces || state.interfaces;
+    state.selectedInterface = data.selected || ifname;
+    state.target = { ssid: "", bssid: "" };
+    state.networks = [];
+    state.networkPage = 0;
+    state.lastSample = null;
+    elements.statusLine.textContent = `Scanning ${state.selectedInterface}`;
+    renderInterfaces();
+    renderNetworks();
+    await loadTarget();
+    await loadNetworks();
+  } catch (err) {
+    console.warn("Interface update failed", err);
+    elements.statusLine.textContent = "Interface update failed";
+    renderInterfaces();
+  }
 }
 
 async function loadTarget() {
@@ -279,9 +435,12 @@ async function loadNetworks() {
     }
     const data = await res.json();
     state.networks = data.networks || [];
+    const totalPages = Math.max(1, Math.ceil(state.networks.length / NETWORK_PAGE_SIZE));
+    state.networkPage = Math.min(state.networkPage, totalPages - 1);
+    state.networkError = "";
   } catch (err) {
     console.warn("Network scan failed", err);
-    setEmptyList("Network scan failed");
+    state.networkError = "Network scan failed";
   } finally {
     state.loadingNetworks = false;
     renderNetworks();
@@ -357,7 +516,11 @@ setInterval(() => {
 
 elements.refreshNetworks.addEventListener("click", loadNetworks);
 elements.autoTarget.addEventListener("click", selectAutoTarget);
+elements.interfaceSelect.addEventListener("change", (event) => {
+  selectInterface(event.target.value);
+});
 
+loadInterfaces();
 loadTarget();
 loadNetworks();
 setInterval(loadNetworks, 15000);

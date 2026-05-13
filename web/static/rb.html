@@ -17,7 +17,10 @@
           </div>
         </div>
         <div class="top-actions">
-          <span class="chip" id="ifname">--</span>
+          <label class="interface-control" id="interface-control">
+            <span>Interface</span>
+            <select id="interface-select" aria-label="Interface"></select>
+          </label>
           <button class="command-button" id="refresh-networks" type="button">Refresh</button>
           <button class="command-button secondary" id="auto-target" type="button">Auto</button>
         </div>
@@ -92,6 +95,7 @@
           <div class="network-list" id="network-list">
             <p class="empty-state">Scanning for nearby networks</p>
           </div>
+          <div class="network-pages" id="network-pages" aria-label="Network pages"></div>
         </aside>
       </section>
     </main>

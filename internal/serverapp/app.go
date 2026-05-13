@@ -151,7 +151,7 @@ func Run(args []string) {
 		if len(detected) == 0 {
 			log.Fatalf("no interfaces found; use -i <ifname>")
 		}
-		if len(detected) == 1 && !askIf {
+		if (len(detected) == 1 && !askIf) || (raspberryUI && !askIf) {
 			ifs = append(ifs, detected[0])
 		} else {
 			selected, err := promptInterface(detected)
@@ -172,7 +172,7 @@ func Run(args []string) {
 	}
 
 	st := store.New(8)
-	apiHandler := api.API{Store: st, Scanner: scanController}
+	apiHandler := api.API{Store: st, Scanner: scanController, InterfaceLister: listInterfaces}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", apiHandler.Status)
@@ -180,6 +180,7 @@ func Run(args []string) {
 	mux.HandleFunc("/api/stream", apiHandler.Stream)
 	mux.HandleFunc("/api/networks", apiHandler.Networks)
 	mux.HandleFunc("/api/target", apiHandler.Target)
+	mux.HandleFunc("/api/interfaces", apiHandler.Interfaces)
 
 	mux.Handle("/", staticHandler(resolveStaticFileSystem(), raspberryUI))
 

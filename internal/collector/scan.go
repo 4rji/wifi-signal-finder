@@ -35,10 +35,12 @@ func (c *ScanCollector) Collect() (model.Sample, error) {
 	c.scanMu.Lock()
 	defer c.scanMu.Unlock()
 
-	target := c.CurrentTarget()
-	useSudo := c.currentUseSudo()
+	ifname, target, useSudo := c.currentConfig()
+	if ifname == "" {
+		return model.Sample{}, errors.New("interface name cannot be empty")
+	}
 
-	networks, usedSudo, err := ScanNetworksWithFallback(c.IfName, useSudo)
+	networks, usedSudo, err := ScanNetworksWithFallback(ifname, useSudo)
 	if err != nil {
 		return model.Sample{}, err
 	}
@@ -47,7 +49,7 @@ func (c *ScanCollector) Collect() (model.Sample, error) {
 	sample, ok := PickTarget(networks, target)
 	if !ok {
 		sample = model.Sample{
-			IfName:         c.IfName,
+			IfName:         ifname,
 			SSID:           target.SSID,
 			BSSID:          normalizeBSSID(target.BSSID),
 			SignalDBM:      -100,
@@ -63,13 +65,29 @@ func (c *ScanCollector) ListNetworks() ([]model.Sample, error) {
 	c.scanMu.Lock()
 	defer c.scanMu.Unlock()
 
-	useSudo := c.currentUseSudo()
-	networks, usedSudo, err := ScanNetworksWithFallback(c.IfName, useSudo)
+	ifname, _, useSudo := c.currentConfig()
+	if ifname == "" {
+		return nil, errors.New("interface name cannot be empty")
+	}
+	networks, usedSudo, err := ScanNetworksWithFallback(ifname, useSudo)
 	if err != nil {
 		return nil, err
 	}
 	c.setUseSudo(usedSudo)
 	return networks, nil
+}
+
+func (c *ScanCollector) CurrentInterface() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return strings.TrimSpace(c.IfName)
+}
+
+func (c *ScanCollector) SetInterface(ifname string) {
+	c.mu.Lock()
+	c.IfName = strings.TrimSpace(ifname)
+	c.Target = ScanTarget{}
+	c.mu.Unlock()
 }
 
 func (c *ScanCollector) CurrentTarget() ScanTarget {
@@ -84,10 +102,10 @@ func (c *ScanCollector) SetTarget(target ScanTarget) {
 	c.mu.Unlock()
 }
 
-func (c *ScanCollector) currentUseSudo() bool {
+func (c *ScanCollector) currentConfig() (string, ScanTarget, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.UseSudo
+	return strings.TrimSpace(c.IfName), normalizeTarget(c.Target), c.UseSudo
 }
 
 func (c *ScanCollector) setUseSudo(useSudo bool) {
