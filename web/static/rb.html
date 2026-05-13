@@ -8,38 +8,91 @@
   </head>
   <body>
     <main class="rb-screen">
-      <section class="signal-panel" aria-live="polite">
-        <header class="topline">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <strong>WiFi Radar</strong>
+            <span id="status-line">Waiting for scan data</span>
+          </div>
+        </div>
+        <div class="top-actions">
           <span class="chip" id="ifname">--</span>
-          <span class="chip right" id="freq">--</span>
-        </header>
+          <button class="command-button" id="refresh-networks" type="button">Refresh</button>
+          <button class="command-button secondary" id="auto-target" type="button">Auto</button>
+        </div>
+      </header>
 
-        <div class="radar-stage">
-          <div class="radar" id="radar" aria-hidden="true">
-            <div class="sweep"></div>
-            <div class="pulse" id="pulse"></div>
-            <span class="ring outer"></span>
-            <span class="ring middle"></span>
-            <span class="ring inner"></span>
-            <span class="center-dot"></span>
+      <section class="dashboard">
+        <section class="signal-area" aria-live="polite">
+          <div class="target-line">
+            <span>Tracking</span>
+            <strong id="ssid">--</strong>
           </div>
 
-          <div class="readout">
-            <div class="readout-main">
-              <span id="signal-db">--</span><span class="unit">dBm</span>
+          <div class="radar-stage">
+            <div class="radar" id="radar" aria-hidden="true">
+              <div class="sweep"></div>
+              <div class="pulse" id="pulse"></div>
+              <span class="ring outer"></span>
+              <span class="ring middle"></span>
+              <span class="ring inner"></span>
+              <span class="center-dot"></span>
             </div>
-            <p id="quality">Sin datos</p>
+
+            <div class="readout">
+              <div class="readout-main">
+                <span id="signal-db">--</span><span class="unit">dBm</span>
+              </div>
+              <p id="quality">No data</p>
+            </div>
           </div>
-        </div>
 
-        <footer class="details">
-          <strong id="ssid">--</strong>
-          <span id="bssid">--</span>
-        </footer>
+          <div class="quality-bar" aria-hidden="true">
+            <div id="quality-bar"></div>
+          </div>
 
-        <div class="quality-bar" aria-hidden="true">
-          <div id="quality-bar"></div>
-        </div>
+          <div class="metric-grid">
+            <div class="metric">
+              <span>Quality</span>
+              <strong id="quality-score">--</strong>
+            </div>
+            <div class="metric">
+              <span>Frequency</span>
+              <strong id="freq">--</strong>
+            </div>
+            <div class="metric">
+              <span>Channel</span>
+              <strong id="channel">--</strong>
+            </div>
+            <div class="metric">
+              <span>Last seen</span>
+              <strong id="last-seen">--</strong>
+            </div>
+            <div class="metric wide">
+              <span>BSSID</span>
+              <strong id="bssid">--</strong>
+            </div>
+            <div class="metric">
+              <span>RX</span>
+              <strong id="rx">--</strong>
+            </div>
+            <div class="metric">
+              <span>TX</span>
+              <strong id="tx">--</strong>
+            </div>
+          </div>
+        </section>
+
+        <aside class="network-panel">
+          <div class="panel-heading">
+            <h1>Networks</h1>
+            <span id="scan-count">Scanning</span>
+          </div>
+          <div class="network-list" id="network-list">
+            <p class="empty-state">Scanning for nearby networks</p>
+          </div>
+        </aside>
       </section>
     </main>
 

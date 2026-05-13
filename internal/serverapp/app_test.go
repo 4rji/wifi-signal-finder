@@ -45,3 +45,20 @@ func TestBrowserURLUsesLocalhostForWildcardBind(t *testing.T) {
 		t.Fatalf("browserURL = %q, want %q", got, want)
 	}
 }
+
+func TestBuildCollectorsSkipsScanTargetPromptWhenDisabled(t *testing.T) {
+	collectors, scanner, err := buildCollectors("scan", []string{"wlan0"}, "", "", false)
+	if err != nil {
+		t.Fatalf("buildCollectors: %v", err)
+	}
+	if len(collectors) != 1 {
+		t.Fatalf("collectors = %d, want 1", len(collectors))
+	}
+	if scanner == nil {
+		t.Fatal("scanner is nil")
+	}
+	target := scanner.CurrentTarget()
+	if target.SSID != "" || target.BSSID != "" {
+		t.Fatalf("target = %+v, want empty auto target", target)
+	}
+}

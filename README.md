@@ -38,9 +38,11 @@ If you are connected and want link metrics (RX/TX), use:
 go run . metrics -i wlp0s20f3
 ```
 
-## Raspberry Pi 2.4 inch display
+## Raspberry Pi 7 inch touchscreen
 
-Use `-rb` to serve the compact Raspberry display UI. It replaces the desktop dashboard at `/` with a small screen that only shows the spinning radar wheel, current dBm, quality, SSID, BSSID, interface, and frequency.
+Use `-rb` to serve the Raspberry touchscreen UI. It replaces the desktop dashboard at `/` with a 7 inch layout that shows the spinning radar, current dBm, signal quality, BSSID, interface, frequency, channel, last-seen time, and a touch-friendly list of nearby Wi-Fi networks.
+
+In Raspberry mode, scan mode no longer asks you to pick a network in the terminal when `--ssid` or `--bssid` is omitted. The UI starts in auto-strongest mode, lists nearby networks on screen, and lets you tap a network to track it. Tap `Auto` to return to the strongest visible network or `Refresh` to rescan the list.
 
 Build for Raspberry Pi 2:
 
@@ -54,7 +56,13 @@ Run it on the Pi:
 sudo ./wifi-radar scan -i wlan0 --ssid "MyWiFi" -rb --listen 127.0.0.1:8888 --open=false
 ```
 
-Open the 2.4 inch screen in Chromium kiosk:
+or select the network from the touchscreen:
+
+```bash
+sudo ./wifi-radar scan -i wlan0 -rb --listen 127.0.0.1:8888 --open=false
+```
+
+Open the touchscreen UI in Chromium kiosk:
 
 ```bash
 chromium-browser --kiosk --disable-infobars --noerrdialogs http://127.0.0.1:8888/
@@ -78,7 +86,7 @@ Description=WiFi Radar
 After=network.target
 
 [Service]
-ExecStart=/home/pi/wifi-radar scan -i wlan0 --ssid=MyWiFi -rb --listen 127.0.0.1:8888 --open=false
+ExecStart=/home/pi/wifi-radar scan -i wlan0 -rb --listen 127.0.0.1:8888 --open=false
 Restart=always
 User=root
 
@@ -123,3 +131,6 @@ sudo reboot
 - `GET /api/status`
 - `GET /api/best`
 - `GET /api/stream` (SSE)
+- `GET /api/networks`
+- `GET /api/target`
+- `POST /api/target`

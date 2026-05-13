@@ -99,7 +99,7 @@ func Run(args []string) {
 	flags.BoolVar(&public, "public", false, "bind 0.0.0.0 (overrides listen if set)")
 	flags.BoolVar(&askIf, "ask-if", false, "always ask which interface to use")
 	flags.BoolVar(&openBrowser, "open", true, "open browser after start")
-	flags.BoolVar(&raspberryUI, "rb", false, "serve compact Raspberry Pi 2.4 inch display UI")
+	flags.BoolVar(&raspberryUI, "rb", false, "serve Raspberry Pi touchscreen UI")
 	flags.StringVar(&mode, "mode", "scan", "collection mode: scan or link")
 	flags.StringVar(&targetSSID, "ssid", "", "target SSID for scan mode")
 	flags.StringVar(&targetBSSID, "bssid", "", "target BSSID for scan mode")
@@ -166,20 +166,23 @@ func Run(args []string) {
 		log.Fatalf("scan mode supports a single interface; got %d", len(ifs))
 	}
 
+	collectors, scanController, err := buildCollectors(mode, []string(ifs), targetSSID, targetBSSID, !raspberryUI)
+	if err != nil {
+		log.Fatalf("setup collectors: %v", err)
+	}
+
 	st := store.New(8)
-	apiHandler := api.API{Store: st}
+	apiHandler := api.API{Store: st, Scanner: scanController}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", apiHandler.Status)
 	mux.HandleFunc("/api/best", apiHandler.Best)
 	mux.HandleFunc("/api/stream", apiHandler.Stream)
+	mux.HandleFunc("/api/networks", apiHandler.Networks)
+	mux.HandleFunc("/api/target", apiHandler.Target)
 
 	mux.Handle("/", staticHandler(resolveStaticFileSystem(), raspberryUI))
 
-	collectors, err := buildCollectors(mode, []string(ifs), targetSSID, targetBSSID)
-	if err != nil {
-		log.Fatalf("setup collectors: %v", err)
-	}
 	go collectLoop(st, collectors, interval)
 
 	log.Printf("listening on http://%s", listen)
@@ -216,7 +219,7 @@ func printStartupInfo(w io.Writer, function string, mode string, listen string, 
 	}
 	fmt.Fprintf(w, "%s %s\n", paint("Selected mode:", ansiBold, ansiYellow), paint(mode, ansiGreen))
 	if raspberryUI {
-		fmt.Fprintf(w, "%s %s\n", paint("Display UI:", ansiBold, ansiYellow), paint("Raspberry Pi 2.4 inch", ansiGreen))
+		fmt.Fprintf(w, "%s %s\n", paint("Display UI:", ansiBold, ansiYellow), paint("Raspberry Pi touchscreen", ansiGreen))
 	}
 	fmt.Fprintf(w, "%s %s\n", paint("Listening:", ansiBold, ansiYellow), paint(fmt.Sprintf("http://%s/", listen), ansiBlue))
 	fmt.Fprintln(w, paint("Use --help to see all flags.", ansiDim))
@@ -444,16 +447,20 @@ type namedSampler struct {
 	sampler sampler
 }
 
-func buildCollectors(mode string, ifs []string, targetSSID string, targetBSSID string) ([]namedSampler, error) {
+func buildCollectors(mode string, ifs []string, targetSSID string, targetBSSID string, promptForTarget bool) ([]namedSampler, *collector.ScanCollector, error) {
 	collectors := make([]namedSampler, 0, len(ifs))
 	if mode == "scan" {
 		target := collector.ScanTarget{
 			SSID:  strings.TrimSpace(targetSSID),
 			BSSID: strings.TrimSpace(targetBSSID),
 		}
-		target, useSudo, err := resolveScanTarget(ifs[0], target)
-		if err != nil {
-			return nil, err
+		useSudo := false
+		if promptForTarget && !hasScanTarget(target) {
+			var err error
+			target, useSudo, err = resolveScanTarget(ifs[0], target)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		scanner := &collector.ScanCollector{
 			IfName:  ifs[0],
@@ -464,7 +471,7 @@ func buildCollectors(mode string, ifs []string, targetSSID string, targetBSSID s
 			name:    ifs[0],
 			sampler: scanner,
 		})
-		return collectors, nil
+		return collectors, scanner, nil
 	}
 
 	for _, ifname := range ifs {
@@ -473,7 +480,11 @@ func buildCollectors(mode string, ifs []string, targetSSID string, targetBSSID s
 			sampler: collector.Collector{IfName: ifname},
 		})
 	}
-	return collectors, nil
+	return collectors, nil, nil
+}
+
+func hasScanTarget(target collector.ScanTarget) bool {
+	return strings.TrimSpace(target.SSID) != "" || strings.TrimSpace(target.BSSID) != ""
 }
 
 func resolveScanTarget(ifname string, target collector.ScanTarget) (collector.ScanTarget, bool, error) {

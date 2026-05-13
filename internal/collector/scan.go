@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"wifi-radar/internal/model"
 )
@@ -17,29 +18,38 @@ import (
 var ErrTargetNotFound = errors.New("target network not found")
 
 type ScanTarget struct {
-	SSID  string
-	BSSID string
+	SSID  string `json:"ssid"`
+	BSSID string `json:"bssid"`
 }
 
 type ScanCollector struct {
 	IfName  string
 	Target  ScanTarget
 	UseSudo bool
+
+	mu     sync.RWMutex
+	scanMu sync.Mutex
 }
 
 func (c *ScanCollector) Collect() (model.Sample, error) {
-	networks, usedSudo, err := ScanNetworksWithFallback(c.IfName, c.UseSudo)
+	c.scanMu.Lock()
+	defer c.scanMu.Unlock()
+
+	target := c.CurrentTarget()
+	useSudo := c.currentUseSudo()
+
+	networks, usedSudo, err := ScanNetworksWithFallback(c.IfName, useSudo)
 	if err != nil {
 		return model.Sample{}, err
 	}
-	c.UseSudo = usedSudo
+	c.setUseSudo(usedSudo)
 
-	sample, ok := PickTarget(networks, c.Target)
+	sample, ok := PickTarget(networks, target)
 	if !ok {
 		sample = model.Sample{
 			IfName:         c.IfName,
-			SSID:           c.Target.SSID,
-			BSSID:          normalizeBSSID(c.Target.BSSID),
+			SSID:           target.SSID,
+			BSSID:          normalizeBSSID(target.BSSID),
 			SignalDBM:      -100,
 			TimestampUnixM: model.NowUnixMS(),
 		}
@@ -47,6 +57,43 @@ func (c *ScanCollector) Collect() (model.Sample, error) {
 	}
 	sample.TimestampUnixM = model.NowUnixMS()
 	return sample, nil
+}
+
+func (c *ScanCollector) ListNetworks() ([]model.Sample, error) {
+	c.scanMu.Lock()
+	defer c.scanMu.Unlock()
+
+	useSudo := c.currentUseSudo()
+	networks, usedSudo, err := ScanNetworksWithFallback(c.IfName, useSudo)
+	if err != nil {
+		return nil, err
+	}
+	c.setUseSudo(usedSudo)
+	return networks, nil
+}
+
+func (c *ScanCollector) CurrentTarget() ScanTarget {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return normalizeTarget(c.Target)
+}
+
+func (c *ScanCollector) SetTarget(target ScanTarget) {
+	c.mu.Lock()
+	c.Target = normalizeTarget(target)
+	c.mu.Unlock()
+}
+
+func (c *ScanCollector) currentUseSudo() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.UseSudo
+}
+
+func (c *ScanCollector) setUseSudo(useSudo bool) {
+	c.mu.Lock()
+	c.UseSudo = useSudo
+	c.mu.Unlock()
 }
 
 func ScanNetworksWithFallback(ifname string, useSudo bool) ([]model.Sample, bool, error) {
@@ -137,6 +184,7 @@ func PickTarget(networks []model.Sample, target ScanTarget) (model.Sample, bool)
 	if len(networks) == 0 {
 		return model.Sample{}, false
 	}
+	target = normalizeTarget(target)
 	if target.BSSID != "" {
 		want := normalizeBSSID(target.BSSID)
 		for _, n := range networks {
@@ -167,6 +215,13 @@ func PickTarget(networks []model.Sample, target ScanTarget) (model.Sample, bool)
 		}
 	}
 	return best, true
+}
+
+func normalizeTarget(target ScanTarget) ScanTarget {
+	return ScanTarget{
+		SSID:  strings.TrimSpace(target.SSID),
+		BSSID: normalizeBSSID(target.BSSID),
+	}
 }
 
 func parseBSSIDLine(line string) string {
