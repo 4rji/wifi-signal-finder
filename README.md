@@ -1,5 +1,11 @@
 # WiFi Radar (Go)
 
+## Update
+
+The app was updated with the `-rb` flag for Raspberry Pi screens and the `-rb2` flag for 2.4 inch screens. The graphical interface was also refined, and it now supports selecting the Wi-Fi network directly on the screen, making scanning easier. Kiosk mode was added to simplify startup and use on Raspberry Pi; instructions are below.
+
+![WiFi Radar running on Raspberry Pi displays](wifi-signal.webp)
+
 Minimal MVP that scans Wi-Fi signal levels via `iw`, exposes an HTTP API + SSE, and renders a small radar/gauge UI.
 
 ![WiFi Radar UI](image.webp)
